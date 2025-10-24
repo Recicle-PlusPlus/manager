@@ -31,6 +31,9 @@ import { useContext, useEffect } from 'react';
 import { UserContext } from '../../contexts/userContext';
 import { SignOut } from '../../services/user';
 import { APPNAME } from '../../config/consts';
+import path from 'path';
+import { Badge } from '@mui/material';
+import { Shop, ShoppingBag, ShoppingCart } from '@mui/icons-material';
 
 const drawerWidth = 240;
 
@@ -99,6 +102,11 @@ const Paths = [
         path: '/logged/dashboard',
         title: 'Estatísticas',
         icon: <BarChartIcon sx={{color: 'secondary.main'}}/>
+    },
+    {
+      path: '/logged/marketplace',
+      title: 'Marketplace',
+      icon: <ShoppingBag sx={{color: 'secondary.main'}}/>
     }
 ];
 
