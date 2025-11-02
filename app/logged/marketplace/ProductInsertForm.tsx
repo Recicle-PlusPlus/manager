@@ -201,7 +201,7 @@ export default function ProductInsertForm({ onSuccess, initialValues }: { onSucc
           )}
         </div>
         <div style={{ marginBottom: 12 }}>
-          <label style={{ display: 'block', marginBottom: 6 }}>Preço (Pontos)</label>
+          <label style={{ display: 'block', marginBottom: 6 }}>Preço ())</label>
           <input
             {...register('currentPrice', {
               required: 'Preço é obrigatório',

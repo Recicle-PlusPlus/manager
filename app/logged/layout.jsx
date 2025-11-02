@@ -22,6 +22,7 @@ import AccountCircleIcon from '@mui/icons-material/AccountCircle';
 import GroupIcon from '@mui/icons-material/Group';
 import BarChartIcon from '@mui/icons-material/BarChart';
 import LogoutIcon from '@mui/icons-material/Logout';
+import RecyclingIcon from '@mui/icons-material/Recycling';
 import Stack from '@mui/material/Stack';
 import Avatar from '@mui/material/Avatar';
 import Link from "next/link";
@@ -107,6 +108,11 @@ const Paths = [
       path: '/logged/marketplace',
       title: 'Marketplace',
       icon: <ShoppingBag sx={{color: 'secondary.main'}}/>
+    },
+    {
+      path: '/logged/materials',
+      title: 'Materiais',
+      icon: <RecyclingIcon sx={{color: 'secondary.main'}}/>
     }
 ];
 
