@@ -62,7 +62,7 @@ export default function ProductList({ products, setEditingProduct, onDeleteProdu
               <TableCell align="center"><b>ID</b></TableCell>
               <TableCell align="center"><b>Nome</b></TableCell>
               <TableCell align="center"><b>Categoria</b></TableCell>
-              <TableCell align="center"><b>Preço</b></TableCell>
+              <TableCell align="center"><b>Preço (Pts)</b></TableCell>
               <TableCell align="center"><b>Estoque</b></TableCell>
               <TableCell align="center"><b>Imagem</b></TableCell>
               <TableCell align="center"><b>Ações</b></TableCell>
@@ -77,7 +77,7 @@ export default function ProductList({ products, setEditingProduct, onDeleteProdu
                 <TableCell align="center" sx={{ verticalAlign: 'middle' }}>{p.intId || p.productId}</TableCell>
                 <TableCell align="center" sx={{ verticalAlign: 'middle' }}>{p.name}</TableCell>
                 <TableCell align="center" sx={{ verticalAlign: 'middle' }}>{p.category}</TableCell>
-                <TableCell align="center" sx={{ verticalAlign: 'middle' }}>R$ {Number(p.currentPrice).toFixed(2)}</TableCell>
+                <TableCell align="center" sx={{ verticalAlign: 'middle' }}>{Number(p.currentPrice).toFixed(2)}</TableCell>
                 <TableCell align="center" sx={{ verticalAlign: 'middle' }}>{p.stock}</TableCell>
                 <TableCell align="center" sx={{ verticalAlign: 'middle' }}>
                   {(p.imgUrl || p.imageUrl) && (

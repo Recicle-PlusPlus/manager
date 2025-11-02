@@ -201,26 +201,11 @@ export default function ProductInsertForm({ onSuccess, initialValues }: { onSucc
           )}
         </div>
         <div style={{ marginBottom: 12 }}>
-          <label style={{ display: 'block', marginBottom: 6 }}>Preço ())</label>
-          <input
-            {...register('currentPrice', {
-              required: 'Preço é obrigatório',
-              validate: v => (v && !isNaN(Number(v)) && Number(v) > 0) || 'Preço inválido',
-            })}
-            placeholder="0.00"
-            inputMode="decimal"
-            style={{ width: '100%', padding: 8 }}
-          />
-          {errors.currentPrice && (
-            <span style={{ color: 'red', fontSize: 12 }}>{errors.currentPrice.message}</span>
-          )}
-        </div>
-        <div style={{ marginBottom: 12 }}>
           <label style={{ display: 'block', marginBottom: 6 }}>Preço Original</label>
           <input
             {...register('originalPrice', {
               required: 'Preço original é obrigatório',
-              validate: v => (v !== '' && !isNaN(Number(v))) || 'Preço inválido',
+              validate: v => (v !== '' && !isNaN(Number(v)) && Number(v) > 0) || 'Preço inválido',
             })}
             placeholder="0.00"
             inputMode="decimal"
@@ -228,6 +213,28 @@ export default function ProductInsertForm({ onSuccess, initialValues }: { onSucc
           />
           {errors.originalPrice && (
             <span style={{ color: 'red', fontSize: 12 }}>{errors.originalPrice.message}</span>
+          )}
+        </div>
+        <div style={{ marginBottom: 12 }}>
+          <label style={{ display: 'block', marginBottom: 6 }}>Preço Atual (com desconto)</label>
+          <input
+            {...register('currentPrice', {
+              required: 'Preço é obrigatório',
+              validate: {
+                validNumber: v => (v && !isNaN(Number(v)) && Number(v) > 0) || 'Preço inválido',
+                notGreaterThanOriginal: v => {
+                  const originalPrice = watch('originalPrice');
+                  if (!originalPrice || !v) return true;
+                  return Number(v) <= Number(originalPrice) || 'Preço atual não pode ser maior que o preço original';
+                }
+              }
+            })}
+            placeholder="0.00"
+            inputMode="decimal"
+            style={{ width: '100%', padding: 8 }}
+          />
+          {errors.currentPrice && (
+            <span style={{ color: 'red', fontSize: 12 }}>{errors.currentPrice.message}</span>
           )}
         </div>
         <div style={{ marginBottom: 12 }}>
