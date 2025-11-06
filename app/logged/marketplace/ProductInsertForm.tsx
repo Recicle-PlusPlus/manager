@@ -28,7 +28,6 @@ export enum ProductCategory {
 
 const firestoreRefMarketplace = collection(Firestore, 'marketplace');
 
-// Função para buscar o próximo intId disponível
 async function getNextIntId(): Promise<number> {
   const snapshot = await getDocs(firestoreRefMarketplace);
   let maxId = 0;
@@ -78,7 +77,6 @@ export default function ProductInsertForm({ onSuccess, initialValues }: { onSucc
     }
   }, [initialValues, setValue]);
 
-  // Função para upload de imagem
   async function uploadProductImage(file: File | null): Promise<string | null> {
     if (!file) return null;
     const path = `images/marketplace/${Date.now()}_${file.name}`;
@@ -87,9 +85,9 @@ export default function ProductInsertForm({ onSuccess, initialValues }: { onSucc
     return await getDownloadURL(sRef);
   }
 
-  // Função para atualizar produto
+  
   async function updateProduct(data: FormValues, imageUrl: string | null) {
-    const intId = initialValues?.intId || data.intId;
+    const intId = initialValues?.intId;
     if (!intId) throw new Error('ID do produto não encontrado para edição.');
 
     const productDocRef = doc(Firestore, 'marketplace', String(intId));

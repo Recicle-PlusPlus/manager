@@ -39,7 +39,6 @@ export default function MaterialForm({
   const [loading, setLoading] = React.useState(false);
   const [message, setMessage] = React.useState<string | null>(null);
 
-  // Função para atualizar material
   async function updateMaterial(data: MaterialFormValues) {
     if (!data.id) throw new Error('ID do material não encontrado para edição.');
 
