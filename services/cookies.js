@@ -2,6 +2,7 @@
 import { cookies } from "next/headers";
 
 async function setCookies(name, value){
+    const cookieStore = await cookies();
     cookies().set({
         name: name,
         value: value,
@@ -9,16 +10,19 @@ async function setCookies(name, value){
     });
 }
 
-function deleteCookies(name){
-    cookies().delete(name);
+async function deleteCookies(name){
+    const cookieStore = await cookies();
+    cookieStore.delete(name);
 }
 
-function hasCookies(name){
-    return cookies().has(name);
+async function hasCookies(name){
+    const cookieStore = await cookies();
+    return cookieStore.has(name);
 }
 
-function getCookies(name){
-    return cookies().get(name);
+async function getCookies(name){
+    const cookieStore = await cookies();
+    return cookieStore.get(name);
 }
 
 export {setCookies, hasCookies, deleteCookies, getCookies};
