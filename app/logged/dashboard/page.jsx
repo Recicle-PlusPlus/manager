@@ -3,147 +3,86 @@
 import React, { useEffect, useState } from 'react';
 import styles from './Dashboard.module.css';
 import { FontAwesomeIcon } from '@fortawesome/react-fontawesome';
-import { faHouse, faUser, faRecycle, faHandshake } from '@fortawesome/free-solid-svg-icons';
-// 1. Importar o cliente supabase que criamos antes
+import { faHouse, faUser, faRecycle, faHandshake, faTrophy } from '@fortawesome/free-solid-svg-icons';
+import { 
+    AreaChart, Area, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer,
+    PieChart, Pie, Cell, Legend
+} from 'recharts';
 import { supabase } from '../../../config/supabaseClient'; 
 
-// Função auxiliar para contar registros em tabelas
-async function fetchCount(table, filterColumn, filterValue) {
-    // count: 'exact' retorna o número total sem baixar os dados (rápido)
-    const { count, error } = await supabase
-        .from(table)
-        .select('*', { count: 'exact', head: true })
-        .eq(filterColumn, filterValue);
-    
-    if (error) {
-        console.error(`Erro ao contar ${table}:`, error);
-        return 0;
-    }
-    return count;
-}
+// Cores para o gráfico de pizza (Materiais)
+const COLORS = ['#0088FE', '#00C49F', '#FFBB28', '#FF8042', '#AF19FF', '#FF4560'];
 
-// Função para calcular estatísticas reais baseadas nas doações
-async function fetchDonationStats() {
-    // Buscamos os itens das doações, trazendo o nome do material e o status da doação
-    // O !inner força que a doação exista e satisfaça o filtro (status completed)
-    const { data, error } = await supabase
-        .from('donation_items')
-        .select(`
-            weight_kg,
-            materials ( name ),
-            donations!inner ( status )
-        `)
-        .eq('donations.status', 'completed'); 
-
-    if (error) {
-        console.error("Erro ao buscar estatísticas:", error);
-        return null;
-    }
-
-    // Inicializa acumuladores
-    let stats = {
-        total_sum: 0,
-        sum_eletronicKg: 0,
-        sum_glassKg: 0,
-        sum_metalKg: 0,
-        sum_oilKg: 0,
-        sum_paperKg: 0,
-        sum_plasticKg: 0,
-        collections_count: 0
-    };
-
-    // Como buscamos itens individuais, precisamos contar quantas doações únicas existem
-    // Usamos um Set para contar IDs únicos de doações (opcional, mas preciso para 'Coletas feitas')
-    // Nota: Para contar coletas exatas, faremos uma query separada no useEffect para simplificar
-    
-    // Processamento dos dados no Frontend (Agregação)
-    data.forEach(item => {
-        const weight = Number(item.weight_kg) || 0;
-        const materialName = item.materials?.name?.toLowerCase(); // Normaliza para evitar erros de case
-
-        stats.total_sum += weight;
-
-        // Mapeie aqui conforme os nomes exatos no seu banco (tabela materials)
-        if (materialName?.includes('eletrônico')) stats.sum_eletronicKg += weight;
-        else if (materialName?.includes('vidro')) stats.sum_glassKg += weight;
-        else if (materialName?.includes('metal')) stats.sum_metalKg += weight;
-        else if (materialName?.includes('óleo de cozinha')) stats.sum_oilKg += weight;
-        else if (materialName?.includes('papel')) stats.sum_paperKg += weight;
-        else if (materialName?.includes('plástico')) stats.sum_plasticKg += weight;
+export default function Dashboard() {
+    // Estados para KPIs
+    const [kpiData, setKpiData] = useState({
+        collectors: 0,
+        donors: 0,
+        totalWeight: 0,
+        totalCollections: 0
     });
 
-    return stats;
-}
-
-const Dashboard = () => {
-    const [NCollector, setNCollector] = useState(0);
-    const [NDonor, setNDonor] = useState(0);
-    
-    // Estados dos resíduos
-    const [QSumResidues, setQSumResidues] = useState(0);
-    const [NRecyclingCollections, setNSumRecyclingCollections] = useState(0);
-    const [wasteAmounts, setWasteAmounts] = useState({
-        el: 0, gl: 0, mt: 0, ol: 0, pp: 0, pl: 0
-    });
+    // Estados para Gráficos
+    const [evolutionData, setEvolutionData] = useState([]);
+    const [wasteDistribution, setWasteDistribution] = useState([]);
+    const [topDonors, setTopDonors] = useState([]);
 
     useEffect(() => {
-        async function loadDashboardData() {
-            // 1. Buscar contagem de usuários via RPC (Função Segura)
-            const { data: userCounts, error: userError } = await supabase.rpc('get_user_counts');
-            
-            if (userCounts) {
-                setNCollector(userCounts.collectors);
-                setNDonor(userCounts.donors);
-            } else {
-                console.error("Erro ao buscar contagem:", userError);
-            }
+        async function loadDashboard() {
+            try {
+                // 1. Carregar KPIs (Contagens simples)
+                const { data: userCounts } = await supabase.rpc('get_user_counts');
+                const { count: collectionsCount } = await supabase
+                    .from('donations')
+                    .select('*', { count: 'exact', head: true })
+                    .eq('status', 'completed');
 
-            // 2. Contar Coletas Finalizadas (Mantém igual, pois Donations não tem RLS bloqueante ainda)
-            const collections = await fetchCount('donations', 'status', 'completed');
-            setNSumRecyclingCollections(collections);
+                // 2. Carregar Dados dos Gráficos (RPCs novas)
+                const { data: evolution } = await supabase.rpc('get_monthly_evolution');
+                const { data: distribution } = await supabase.rpc('get_waste_distribution');
+                const { data: ranking } = await supabase.rpc('get_top_donors');
 
-            // 3. Calcular Pesos dos Materiais (Mantém igual)
-            const stats = await fetchDonationStats();
-            if (stats) {
-                setQSumResidues(stats.total_sum);
-                setWasteAmounts({
-                    el: stats.sum_eletronicKg,
-                    gl: stats.sum_glassKg,
-                    mt: stats.sum_metalKg,
-                    ol: stats.sum_oilKg,
-                    pp: stats.sum_paperKg,
-                    pl: stats.sum_plasticKg
+                // Calcular total geral baseado na distribuição
+                const totalWeight = distribution?.reduce((acc, curr) => acc + Number(curr.total_weight), 0) || 0;
+
+                // Atualizar estados
+                setKpiData({
+                    collectors: userCounts?.collectors || 0,
+                    donors: userCounts?.donors || 0,
+                    totalWeight: totalWeight,
+                    totalCollections: collectionsCount || 0
                 });
+
+                setEvolutionData(evolution || []);
+                setWasteDistribution(distribution || []);
+                setTopDonors(ranking || []);
+
+            } catch (error) {
+                console.error("Erro ao carregar dashboard:", error);
             }
         }
 
-        loadDashboardData();
+        loadDashboard();
     }, []);
 
+    // Cards Superiores
     const statsCards = [
-        { title: 'Coletores', value: NCollector, icon: faUser },
-        { title: 'Doadores', value: NDonor, icon: faHouse },
-        { title: 'Resíduos coletados', value: `${QSumResidues.toFixed(1)}kg`, icon: faRecycle }, // Adicionei toFixed para formatação
-        { title: 'Coletas feitas', value: NRecyclingCollections, icon: faHandshake },
-    ];
-
-    const wasteData = [
-        { type: 'Eletrônico', amount: wasteAmounts.el, color: '#FFA500' },
-        { type: 'Vidro', amount: wasteAmounts.gl, color: '#6A5ACD' },
-        { type: 'Metal', amount: wasteAmounts.mt, color: '#FF6347' },
-        { type: 'Óleo', amount: wasteAmounts.ol, color: '#FFA500' },
-        { type: 'Papel', amount: wasteAmounts.pp, color: '#6A5ACD' },
-        { type: 'Plástico', amount: wasteAmounts.pl, color: '#FF6347' },
+        { title: 'Coletores Ativos', value: kpiData.collectors, icon: faUser, color: '#4a90e2' },
+        { title: 'Doadores Ativos', value: kpiData.donors, icon: faHouse, color: '#50e3c2' },
+        { title: 'Resíduos (kg)', value: kpiData.totalWeight.toFixed(1), icon: faRecycle, color: '#f5a623' },
+        { title: 'Coletas Totais', value: kpiData.totalCollections, icon: faHandshake, color: '#b8e986' },
     ];
 
     return (
-        <div>
-            <h1>ESTATÍSTICAS</h1>
-            <div className={styles.dashboardContainer}>
+        <div className={styles.container}>
+            <h1 className={styles.pageTitle}>Dashboard Operacional</h1>
+            
+            {/* Seção 1: KPIs */}
+            <div className={styles.kpiGrid}>
                 {statsCards.map((item, index) => (
-                    <div key={index} className={styles.card}>
-                        <div className={styles.iconContainer}>
-                            <FontAwesomeIcon icon={item.icon} className={styles.icon} />
+                    <div key={index} className={styles.card} style={{ borderTop: `4px solid ${item.color}` }}>
+                        <div className={styles.iconContainer} style={{ backgroundColor: `${item.color}20` }}>
+                            <FontAwesomeIcon icon={item.icon} color={item.color} />
                         </div>
                         <div className={styles.info}>
                             <h3>{item.title}</h3>
@@ -153,29 +92,77 @@ const Dashboard = () => {
                 ))}
             </div>
 
-            <div className={styles.wasteSection}>
-                <h2>Tipos de resíduos coletados</h2>
-                <div className={styles.wasteList}>
-                    {wasteData.map((waste, index) => (
-                        <div key={index} className={styles.wasteItem}>
-                            <span className={styles.wasteType}>{waste.type}</span>
-                            <div className={styles.wasteBarContainer}>
-                                <div
-                                    className={styles.wasteBar}
-                                    style={{
-                                        // Evita erro de divisão por zero e limita a 100%
-                                        width: `${QSumResidues > 0 ? (waste.amount / QSumResidues) * 100 : 0}%`,
-                                        backgroundColor: waste.color || 'rgb(170, 220, 160)',
-                                    }}
-                                ></div>
-                            </div>
-                            <span className={styles.wasteAmount}>{waste.amount.toFixed(1)}kg</span>
-                        </div>
-                    ))}
+            <div className={styles.chartsGrid}>
+                {/* Seção 2: Evolução Mensal */}
+                <div className={styles.chartCard}>
+                    <h2>Evolução de Coleta (Últimos 12 meses)</h2>
+                    <div style={{ width: '100%', height: 300 }}>
+                        <ResponsiveContainer>
+                            <AreaChart data={evolutionData}>
+                                <CartesianGrid strokeDasharray="3 3" vertical={false} />
+                                <XAxis dataKey="month_name" style={{ fontSize: '12px' }} />
+                                <YAxis style={{ fontSize: '12px' }} />
+                                <Tooltip 
+                                    contentStyle={{ backgroundColor: '#fff', borderRadius: '8px', border: 'none', boxShadow: '0 2px 10px rgba(0,0,0,0.1)' }}
+                                />
+                                <Area type="monotone" dataKey="total_weight" name="Peso (kg)" stroke="#4a90e2" fill="#4a90e2" fillOpacity={0.2} />
+                            </AreaChart>
+                        </ResponsiveContainer>
+                    </div>
+                </div>
+
+                {/* Seção 3: Distribuição por Tipo */}
+                <div className={styles.chartCard}>
+                    <h2>Composição dos Resíduos</h2>
+                    <div style={{ width: '100%', height: 300 }}>
+                        <ResponsiveContainer>
+                            <PieChart>
+                                <Pie
+                                    data={wasteDistribution}
+                                    cx="50%"
+                                    cy="50%"
+                                    innerRadius={60}
+                                    outerRadius={80}
+                                    paddingAngle={5}
+                                    dataKey="total_weight"
+                                    nameKey="material_name"
+                                >
+                                    {wasteDistribution.map((entry, index) => (
+                                        <Cell key={`cell-${index}`} fill={COLORS[index % COLORS.length]} />
+                                    ))}
+                                </Pie>
+                                <Tooltip />
+                                <Legend verticalAlign="bottom" height={36} iconType="circle"/>
+                            </PieChart>
+                        </ResponsiveContainer>
+                    </div>
+                </div>
+            </div>
+
+            {/* Seção 4: Ranking de Doadores */}
+            <div className={styles.rankingSection}>
+                <h2><FontAwesomeIcon icon={faTrophy} color="#FFD700" /> Top Doadores</h2>
+                <div className={styles.tableContainer}>
+                    <table className={styles.rankingTable}>
+                        <thead>
+                            <tr>
+                                <th>Posição</th>
+                                <th>Nome</th>
+                                <th>Total Doado</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            {topDonors.map((donor, index) => (
+                                <tr key={index}>
+                                    <td>#{index + 1}</td>
+                                    <td>{donor.donor_name}</td>
+                                    <td><strong>{Number(donor.total_weight).toFixed(1)} kg</strong></td>
+                                </tr>
+                            ))}
+                        </tbody>
+                    </table>
                 </div>
             </div>
         </div>
     );
-};
-
-export default Dashboard;
+}
