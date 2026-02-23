@@ -1,21 +1,18 @@
-import React from 'react';
-import { useForm, SubmitHandler } from 'react-hook-form';
-import CircularProgress from '@mui/material/CircularProgress';
-import { serverTimestamp, collection, doc, updateDoc, getDocs } from 'firebase/firestore';
-import { Firestore } from '../../../config/firebase';
+import React, { useState } from "react";
+import { useForm, SubmitHandler } from "react-hook-form";
+import CircularProgress from "@mui/material/CircularProgress";
+import { supabase } from "../../../config/supabaseClient";
 
 export type MaterialFormValues = {
-  id: string;
+  id?: string;
   name: string;
   collectorPoints: number;
   donorPoints: number;
 };
 
-const firestoreRefMaterials = collection(Firestore, 'materials');
-
 export default function MaterialForm({
   onSuccess,
-  initialValues
+  initialValues,
 }: {
   onSuccess?: () => void;
   initialValues?: Partial<MaterialFormValues>;
@@ -28,32 +25,39 @@ export default function MaterialForm({
     formState: { errors },
   } = useForm<MaterialFormValues>({
     defaultValues: {
-      id: '',
-      name: '',
+      id: "",
+      name: "",
       collectorPoints: 0,
       donorPoints: 0,
       ...initialValues,
     },
   });
 
-  const [loading, setLoading] = React.useState(false);
-  const [message, setMessage] = React.useState<string | null>(null);
+  const [loading, setLoading] = useState(false);
+  const [message, setMessage] = useState<string | null>(null);
 
   async function updateMaterial(data: MaterialFormValues) {
-    if (!data.id) throw new Error('ID do material não encontrado para edição.');
+    const { error } = await supabase
+      .from("materials")
+      .update({
+        name: data.name,
+        points_for_collector: Number(data.collectorPoints),
+        points_for_donor: Number(data.donorPoints),
+      })
+      .eq("id", data.id);
 
-    const materialDocRef = doc(Firestore, 'materials', data.id);
+    if (error) throw error;
+  }
 
-    const updateData: any = {
+  async function createMaterial(data: MaterialFormValues) {
+    const { error } = await supabase.from("materials").insert({
       name: data.name,
-      points: {
-        coletor: Number(data.collectorPoints),
-        donor: Number(data.donorPoints),
-      },
-      updatedAt: serverTimestamp(),
-    };
+      points_for_collector: Number(data.collectorPoints),
+      points_for_donor: Number(data.donorPoints),
+      active: true,
+    });
 
-    await updateDoc(materialDocRef, updateData);
+    if (error) throw error;
   }
 
   const onSubmit: SubmitHandler<MaterialFormValues> = async (data) => {
@@ -62,103 +66,201 @@ export default function MaterialForm({
     try {
       if (isEditing) {
         await updateMaterial(data);
-        setMessage('Material atualizado com sucesso.');
-        if (onSuccess) onSuccess();
+        setMessage("Material atualizado com sucesso.");
       } else {
-        setMessage('Modo de criação não implementado. Use apenas para edição.');
+        await createMaterial(data);
+        setMessage("Material criado com sucesso.");
       }
+
+      setTimeout(() => {
+        if (onSuccess) onSuccess();
+      }, 1000);
     } catch (err: any) {
-      console.error('Erro ao salvar material:', err);
-      setMessage(err?.message || 'Erro ao salvar material');
+      console.error("Erro ao salvar material:", err);
+      if (err.code === "23505") {
+        setMessage("Já existe um material cadastrado com este nome.");
+      } else {
+        setMessage(err?.message || "Erro ao salvar material");
+      }
     } finally {
       setLoading(false);
     }
   };
 
   return (
-    <div style={{ maxWidth: 700, margin: '0 auto' }}>
-      <h1>{isEditing ? 'Editar Material' : 'Material'}</h1>
-      <form onSubmit={handleSubmit(onSubmit)} style={{ display: 'flex', flexDirection: 'column' }}>
+    <div
+      style={{
+        maxWidth: 700,
+        margin: "0 auto",
+        backgroundColor: "white",
+        padding: "24px",
+        borderRadius: "12px",
+        boxShadow: "0 4px 6px rgba(0,0,0,0.05)",
+      }}
+    >
+      <h2 style={{ marginTop: 0 }}>
+        {isEditing ? "Editar Material" : "Cadastrar Novo Material"}
+      </h2>
+      <form
+        onSubmit={handleSubmit(onSubmit)}
+        style={{ display: "flex", flexDirection: "column" }}
+      >
         {isEditing && (
-          <div style={{ marginBottom: 12, padding: 12, backgroundColor: '#f0f0f0', borderRadius: 4 }}>
-            <strong>ID do Material: {initialValues?.id}</strong>
+          <div
+            style={{
+              marginBottom: 16,
+              padding: 12,
+              backgroundColor: "#f8f9fa",
+              borderRadius: 6,
+              fontSize: "14px",
+              color: "#6c757d",
+            }}
+          >
+            <strong>ID:</strong> {initialValues?.id}
           </div>
         )}
 
-        <div style={{ marginBottom: 12 }}>
-          <label style={{ display: 'block', marginBottom: 6 }}>Nome do Material</label>
+        <div style={{ marginBottom: 16 }}>
+          <label style={{ display: "block", marginBottom: 6, fontWeight: 500 }}>
+            Nome do Material
+          </label>
           <input
-            {...register('name', { required: 'Nome é obrigatório' })}
+            {...register("name", { required: "Nome é obrigatório" })}
             placeholder="Ex: Plástico, Papel, Vidro..."
-            style={{ width: '100%', padding: 8 }}
-            disabled={!isEditing}
+            style={{
+              width: "100%",
+              padding: "10px",
+              borderRadius: "6px",
+              border: "1px solid #ced4da",
+            }}
           />
           {errors.name && (
-            <span style={{ color: 'red', fontSize: 12 }}>{errors.name.message}</span>
+            <span
+              style={{
+                color: "#e74c3c",
+                fontSize: 13,
+                marginTop: 4,
+                display: "block",
+              }}
+            >
+              {errors.name.message}
+            </span>
           )}
         </div>
 
-        <div style={{ marginBottom: 12 }}>
-          <label style={{ display: 'block', marginBottom: 6 }}>
+        <div style={{ marginBottom: 16 }}>
+          <label style={{ display: "block", marginBottom: 6, fontWeight: 500 }}>
             Pontos para Coletor (por kg)
           </label>
           <input
-            {...register('collectorPoints', {
-              required: 'Pontos do coletor são obrigatórios',
+            {...register("collectorPoints", {
+              required: "Pontos do coletor são obrigatórios",
               valueAsNumber: true,
-              min: { value: 0, message: 'Pontos não podem ser negativos' },
+              min: { value: 0, message: "Pontos não podem ser negativos" },
             })}
             type="number"
             placeholder="20"
-            style={{ width: '100%', padding: 8 }}
+            style={{
+              width: "100%",
+              padding: "10px",
+              borderRadius: "6px",
+              border: "1px solid #ced4da",
+            }}
           />
           {errors.collectorPoints && (
-            <span style={{ color: 'red', fontSize: 12 }}>{errors.collectorPoints.message}</span>
+            <span
+              style={{
+                color: "#e74c3c",
+                fontSize: 13,
+                marginTop: 4,
+                display: "block",
+              }}
+            >
+              {errors.collectorPoints.message}
+            </span>
           )}
         </div>
 
-        <div style={{ marginBottom: 12 }}>
-          <label style={{ display: 'block', marginBottom: 6 }}>
+        <div style={{ marginBottom: 24 }}>
+          <label style={{ display: "block", marginBottom: 6, fontWeight: 500 }}>
             Pontos para Doador (por kg)
           </label>
           <input
-            {...register('donorPoints', {
-              required: 'Pontos do doador são obrigatórios',
+            {...register("donorPoints", {
+              required: "Pontos do doador são obrigatórios",
               valueAsNumber: true,
-              min: { value: 0, message: 'Pontos não podem ser negativos' },
+              min: { value: 0, message: "Pontos não podem ser negativos" },
             })}
             type="number"
             placeholder="10"
-            style={{ width: '100%', padding: 8 }}
+            style={{
+              width: "100%",
+              padding: "10px",
+              borderRadius: "6px",
+              border: "1px solid #ced4da",
+            }}
           />
           {errors.donorPoints && (
-            <span style={{ color: 'red', fontSize: 12 }}>{errors.donorPoints.message}</span>
+            <span
+              style={{
+                color: "#e74c3c",
+                fontSize: 13,
+                marginTop: 4,
+                display: "block",
+              }}
+            >
+              {errors.donorPoints.message}
+            </span>
           )}
         </div>
 
         {loading ? (
-          <div style={{ margin: 30, display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8 }}>
-            <CircularProgress size={20} />
-            <span>Salvando...</span>
+          <div
+            style={{
+              display: "flex",
+              alignItems: "center",
+              justifyContent: "center",
+              gap: 8,
+              padding: "10px",
+            }}
+          >
+            <CircularProgress size={24} />
+            <span style={{ color: "#6c757d" }}>Salvando...</span>
           </div>
         ) : (
-          <div style={{ margin: 30, display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8 }}>
-            <button type="submit" style={{ padding: '8px 16px' }} disabled={!isEditing}>
-              {isEditing ? 'Salvar Alterações' : 'Selecione um material para editar'}
-            </button>
-          </div>
+          <button
+            type="submit"
+            style={{
+              padding: "12px",
+              backgroundColor: "#4a90e2",
+              color: "white",
+              border: "none",
+              borderRadius: "6px",
+              fontSize: "16px",
+              fontWeight: "bold",
+              cursor: "pointer",
+            }}
+          >
+            {isEditing ? "Salvar Alterações" : "Criar Material"}
+          </button>
         )}
       </form>
+
       {message && (
-        <p style={{
-          marginTop: 12,
-          padding: 12,
-          backgroundColor: message.includes('sucesso') ? '#d4edda' : '#f8d7da',
-          color: message.includes('sucesso') ? '#155724' : '#721c24',
-          borderRadius: 4
-        }}>
+        <div
+          style={{
+            marginTop: 20,
+            padding: "12px 16px",
+            backgroundColor: message.includes("sucesso")
+              ? "#d4edda"
+              : "#f8d7da",
+            color: message.includes("sucesso") ? "#155724" : "#721c24",
+            borderRadius: "6px",
+            fontWeight: 500,
+          }}
+        >
           {message}
-        </p>
+        </div>
       )}
     </div>
   );
