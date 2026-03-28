@@ -1,286 +1,250 @@
-import React from 'react';
-import { useForm, SubmitHandler, Controller } from 'react-hook-form';
-import CircularProgress from '@mui/material/CircularProgress';
-import { ref as storageRef, uploadBytes, getDownloadURL } from 'firebase/storage';
-import { getDocs, serverTimestamp, collection, doc, setDoc, updateDoc } from 'firebase/firestore';
-import { Firestore, Storage } from '../../../config/firebase';
+import React, { useState } from "react";
+import { useForm, SubmitHandler, Controller } from "react-hook-form";
+import CircularProgress from "@mui/material/CircularProgress";
+import { supabase } from "../../../config/supabaseClient";
 
 export type FormValues = {
-  intId?: number; // ID numérico do produto (gerado automaticamente ou informado para edição)
+  id?: string;
   name: string;
   description: string;
-  currentPrice: string;
-  originalPrice: string;
+  price_points: number;
   stock: number;
-  category: string;
   file: File | null;
-  imgUrl?: string; // URL da imagem atual (usado na edição)
+  image_url?: string;
 };
 
-export enum ProductCategory {
-  Sports = 'Esportes',
-  Clothing = 'Roupas',
-  Entertainment = 'Entretenimento',
-  Electronics = 'Eletrônicos',
-  Home = 'Casa',
-  Sustainable = 'Sustentável',
-}
-
-const firestoreRefMarketplace = collection(Firestore, 'marketplace');
-
-async function getNextIntId(): Promise<number> {
-  const snapshot = await getDocs(firestoreRefMarketplace);
-  let maxId = 0;
-  snapshot.forEach((doc) => {
-    const data = doc.data();
-    const currentId = data.intId || parseInt(doc.id) || 0;
-    if (currentId > maxId) {
-      maxId = currentId;
-    }
-  });
-  return maxId + 1;
-}
-
-export default function ProductInsertForm({ onSuccess, initialValues }: { onSuccess?: () => void, initialValues?: Partial<FormValues> }) {
-  const isEditing = Boolean(initialValues?.intId);
+export default function ProductInsertForm({
+  onSuccess,
+  initialValues,
+}: {
+  onSuccess?: () => void;
+  initialValues?: Partial<FormValues>;
+}) {
+  const isEditing = Boolean(initialValues?.id);
 
   const {
     register,
     handleSubmit,
     watch,
     control,
-    reset,
-    setValue,
     formState: { errors },
   } = useForm<FormValues>({
     defaultValues: {
-      intId: undefined,
-      name: '',
-      description: '',
-      currentPrice: '',
-      originalPrice: '',
-      stock: 0,
-      category: '',
+      name: initialValues?.name || "",
+      description: initialValues?.description || "",
+      price_points: initialValues?.price_points || 0,
+      stock: initialValues?.stock || 0,
       file: null,
       ...initialValues,
     },
   });
-  const [loading, setloading] = React.useState(false);
-  const [message, setMessage] = React.useState<string | null>(null);
-  const watchedFile = watch('file') as File | null;
 
-  React.useEffect(() => {
-    if (initialValues) {
-      (Object.entries(initialValues) as [keyof FormValues, any][]).forEach(([key, value]) => {
-        setValue(key, value);
-      });
-    }
-  }, [initialValues, setValue]);
+  const [loading, setLoading] = useState(false);
+  const [message, setMessage] = useState<string | null>(null);
+  const watchedFile = watch("file") as File | null;
 
+  // Função para fazer upload no Supabase Storage
   async function uploadProductImage(file: File | null): Promise<string | null> {
     if (!file) return null;
-    const path = `images/marketplace/${Date.now()}_${file.name}`;
-    const sRef = storageRef(Storage, path);
-    await uploadBytes(sRef, file);
-    return await getDownloadURL(sRef);
-  }
 
-  
-  async function updateProduct(data: FormValues, imageUrl: string | null) {
-    const intId = initialValues?.intId;
-    if (!intId) throw new Error('ID do produto não encontrado para edição.');
+    // Limpa o nome do arquivo para evitar erros de URL
+    const fileExt = file.name.split(".").pop();
+    const fileName = `${Date.now()}_${Math.random().toString(36).substring(7)}.${fileExt}`;
+    const filePath = `${fileName}`;
 
-    const productDocRef = doc(Firestore, 'marketplace', String(intId));
+    const { error: uploadError } = await supabase.storage
+      .from("marketplace_images")
+      .upload(filePath, file);
 
-    const updateData: any = {
-      intId: intId,
-      name: data.name,
-      description: data.description,
-      currentPrice: Number(data.currentPrice),
-      originalPrice: Number(data.originalPrice),
-      stock: Number(data.stock),
-      category: data.category,
-      updatedAt: serverTimestamp(),
-    };
+    if (uploadError) throw uploadError;
 
-    // Se enviou nova imagem, atualiza. Senão, mantém a anterior
-    if (imageUrl) {
-      updateData.imgUrl = imageUrl;
-    } else if (initialValues?.imgUrl) {
-      updateData.imgUrl = initialValues.imgUrl;
-    }
+    // Pega a URL pública
+    const { data } = supabase.storage
+      .from("marketplace_images")
+      .getPublicUrl(filePath);
 
-    // Usa updateDoc ao invés de setDoc para atualizar documento existente
-    await updateDoc(productDocRef, updateData);
-  }
-
-  // Função para adicionar produto
-  async function addProduct(data: FormValues, imageUrl: string | null, intId: number) {
-    const product = {
-      intId: intId,
-      name: data.name,
-      description: data.description,
-      currentPrice: Number(data.currentPrice),
-      originalPrice: Number(data.originalPrice),
-      stock: Number(data.stock),
-      category: data.category,
-      imgUrl: imageUrl || '',
-      createdAt: serverTimestamp(),
-    };
-    // Usa o intId como ID do documento
-    const productDocRef = doc(Firestore, 'marketplace', String(intId));
-    await setDoc(productDocRef, product);
+    return data.publicUrl;
   }
 
   const onSubmit: SubmitHandler<FormValues> = async (data) => {
-    setloading(true);
+    setLoading(true);
     setMessage(null);
     try {
-      const imageUrl = await uploadProductImage(data.file);
+      let finalImageUrl = initialValues?.image_url || "";
 
-      if (isEditing) {
-        // Modo de edição
-        try {
-          await updateProduct(data, imageUrl);
-          setMessage('Produto atualizado com sucesso.');
-          if (onSuccess) onSuccess();
-        } catch (err: any) {
-          setMessage(err?.message || 'Erro ao atualizar produto');
-        }
-        setloading(false);
-        console.log('Produto atualizado');
-        return;
+      // Se usuário enviou um novo arquivo, faz o upload
+      if (data.file) {
+        const newUrl = await uploadProductImage(data.file);
+        if (newUrl) finalImageUrl = newUrl;
       }
 
-      // Modo de criação - gerar novo intId
-      const nextIntId = await getNextIntId();
-      await addProduct(data, imageUrl, nextIntId);
-      setMessage(`Produto salvo com sucesso. ID: ${nextIntId}`);
-      if (onSuccess) onSuccess();
-      try { reset(); } catch (e) { }
+      if (isEditing) {
+        const { error } = await supabase
+          .from("marketplace_products")
+          .update({
+            name: data.name,
+            description: data.description,
+            price_points: Number(data.price_points),
+            stock: Number(data.stock),
+            image_url: finalImageUrl,
+          })
+          .eq("id", initialValues!.id);
+
+        if (error) throw error;
+        setMessage("Produto atualizado com sucesso.");
+      } else {
+        const { error } = await supabase.from("marketplace_products").insert({
+          name: data.name,
+          description: data.description,
+          price_points: Number(data.price_points),
+          stock: Number(data.stock),
+          image_url: finalImageUrl,
+          is_active: true,
+        });
+
+        if (error) throw error;
+        setMessage("Produto criado com sucesso.");
+      }
+
+      setTimeout(() => {
+        if (onSuccess) onSuccess();
+      }, 1000);
     } catch (err: any) {
-      console.error('Erro ao salvar produto:', err);
-      setMessage(err?.message || 'Erro ao salvar produto');
+      console.error("Erro ao salvar produto:", err);
+      setMessage(err?.message || "Erro ao salvar produto");
     } finally {
-      setloading(false);
+      setLoading(false);
     }
   };
 
   return (
-    <div style={{ maxWidth: 700, margin: '0 auto' }}>
-      <h1>{isEditing ? 'Editar Produto' : 'Adicionar Produto'}</h1>
-      <form onSubmit={handleSubmit(onSubmit)} style={{ display: 'flex', flexDirection: 'column' }}>
-        {isEditing && (
-          <div style={{ marginBottom: 12, padding: 12, backgroundColor: '#f0f0f0', borderRadius: 4 }}>
-            <strong>ID do Produto: {initialValues.intId}</strong>
-          </div>
-        )}
-        <div style={{ marginBottom: 12 }}>
-          <label style={{ display: 'block', marginBottom: 6 }}>Título</label>
+    <div
+      style={{
+        maxWidth: 700,
+        margin: "0 auto",
+        backgroundColor: "white",
+        padding: 24,
+        borderRadius: 8,
+        boxShadow: "0 2px 4px rgba(0,0,0,0.1)",
+      }}
+    >
+      <h2 style={{ marginTop: 0 }}>
+        {isEditing ? "Editar Produto" : "Adicionar Produto"}
+      </h2>
+      <form
+        onSubmit={handleSubmit(onSubmit)}
+        style={{ display: "flex", flexDirection: "column" }}
+      >
+        <div style={{ marginBottom: 16 }}>
+          <label style={{ display: "block", marginBottom: 6, fontWeight: 500 }}>
+            Nome
+          </label>
           <input
-            {...register('name', { required: 'Título é obrigatório' })}
-            placeholder="Nome do produto"
-            style={{ width: '100%', padding: 8 }}
+            {...register("name", { required: "Nome é obrigatório" })}
+            style={{
+              width: "100%",
+              padding: 10,
+              borderRadius: 4,
+              border: "1px solid #ccc",
+            }}
           />
           {errors.name && (
-            <span style={{ color: 'red', fontSize: 12 }}>{errors.name.message}</span>
+            <span style={{ color: "red", fontSize: 12 }}>
+              {errors.name.message}
+            </span>
           )}
         </div>
-        <div style={{ marginBottom: 12 }}>
-          <label style={{ display: 'block', marginBottom: 6 }}>Descrição</label>
+
+        <div style={{ marginBottom: 16 }}>
+          <label style={{ display: "block", marginBottom: 6, fontWeight: 500 }}>
+            Descrição
+          </label>
           <textarea
-            {...register('description', { required: 'Descrição é obrigatória' })}
-            placeholder="Descrição do produto"
-            rows={4}
-            style={{ width: '100%', padding: 8 }}
+            {...register("description", {
+              required: "Descrição é obrigatória",
+            })}
+            rows={3}
+            style={{
+              width: "100%",
+              padding: 10,
+              borderRadius: 4,
+              border: "1px solid #ccc",
+            }}
           />
           {errors.description && (
-            <span style={{ color: 'red', fontSize: 12 }}>{errors.description.message}</span>
+            <span style={{ color: "red", fontSize: 12 }}>
+              {errors.description.message}
+            </span>
           )}
         </div>
-        <div style={{ marginBottom: 12 }}>
-          <label style={{ display: 'block', marginBottom: 6 }}>Preço Original</label>
+
+        <div style={{ marginBottom: 16 }}>
+          <label style={{ display: "block", marginBottom: 6, fontWeight: 500 }}>
+            Preço (Pontos)
+          </label>
           <input
-            {...register('originalPrice', {
-              required: 'Preço original é obrigatório',
-              validate: v => (v !== '' && !isNaN(Number(v)) && Number(v) > 0) || 'Preço inválido',
+            {...register("price_points", {
+              required: "Preço é obrigatório",
+              valueAsNumber: true,
+              min: { value: 1, message: "O preço deve ser maior que zero" },
             })}
-            placeholder="0.00"
-            inputMode="decimal"
-            style={{ width: '100%', padding: 8 }}
-          />
-          {errors.originalPrice && (
-            <span style={{ color: 'red', fontSize: 12 }}>{errors.originalPrice.message}</span>
-          )}
-        </div>
-        <div style={{ marginBottom: 12 }}>
-          <label style={{ display: 'block', marginBottom: 6 }}>Preço Atual (com desconto)</label>
-          <input
-            {...register('currentPrice', {
-              required: 'Preço é obrigatório',
-              validate: {
-                validNumber: v => (v && !isNaN(Number(v)) && Number(v) > 0) || 'Preço inválido',
-                notGreaterThanOriginal: v => {
-                  const originalPrice = watch('originalPrice');
-                  if (!originalPrice || !v) return true;
-                  return Number(v) <= Number(originalPrice) || 'Preço atual não pode ser maior que o preço original';
-                }
-              }
-            })}
-            placeholder="0.00"
-            inputMode="decimal"
-            style={{ width: '100%', padding: 8 }}
-          />
-          {errors.currentPrice && (
-            <span style={{ color: 'red', fontSize: 12 }}>{errors.currentPrice.message}</span>
-          )}
-        </div>
-        <div style={{ marginBottom: 12 }}>
-          <label style={{ display: 'block', marginBottom: 6 }}>Categoria</label>
-          <select
-            {...register('category', { required: 'Categoria é obrigatória' })}
-            style={{ width: '100%', padding: 8 }}
-            defaultValue=""
-          >
-            <option value="" disabled>Selecione uma categoria</option>
-            {Object.entries(ProductCategory).map(([key, value]) => (
-              <option key={key} value={value}>{value}</option>
-            ))}
-          </select>
-          {errors.category && (
-            <span style={{ color: 'red', fontSize: 12 }}>{errors.category.message}</span>
-          )}
-        </div>
-        <div style={{ marginBottom: 12 }}>
-          <label style={{ display: 'block', marginBottom: 6 }}>Estoque (stock)</label>
-          <input
-            {...register('stock', { required: 'Estoque é obrigatório', valueAsNumber: true, min: { value: 0, message: 'Estoque não pode ser negativo' } })}
             type="number"
-            style={{ width: '100%', padding: 8 }}
+            style={{
+              width: "100%",
+              padding: 10,
+              borderRadius: 4,
+              border: "1px solid #ccc",
+            }}
+          />
+          {errors.price_points && (
+            <span style={{ color: "red", fontSize: 12 }}>
+              {errors.price_points.message}
+            </span>
+          )}
+        </div>
+
+        <div style={{ marginBottom: 16 }}>
+          <label style={{ display: "block", marginBottom: 6, fontWeight: 500 }}>
+            Estoque
+          </label>
+          <input
+            {...register("stock", {
+              required: "Estoque é obrigatório",
+              valueAsNumber: true,
+              min: { value: 0, message: "Não pode ser negativo" },
+            })}
+            type="number"
+            style={{
+              width: "100%",
+              padding: 10,
+              borderRadius: 4,
+              border: "1px solid #ccc",
+            }}
           />
           {errors.stock && (
-            <span style={{ color: 'red', fontSize: 12 }}>{errors.stock.message as string}</span>
+            <span style={{ color: "red", fontSize: 12 }}>
+              {errors.stock.message}
+            </span>
           )}
         </div>
-        <div style={{ marginBottom: 12 }}>
-          <label style={{ display: 'block', marginBottom: 6 }}>Imagem</label>
-          {isEditing && initialValues?.imgUrl && !watchedFile && (
-            <div style={{ marginBottom: 8, padding: 8, backgroundColor: '#f9f9f9', borderRadius: 4 }}>
-              <p style={{ margin: '0 0 8px 0', fontSize: 14, color: '#666' }}>Imagem atual:</p>
+
+        <div style={{ marginBottom: 16 }}>
+          <label style={{ display: "block", marginBottom: 6, fontWeight: 500 }}>
+            Imagem
+          </label>
+          {isEditing && initialValues?.image_url && !watchedFile && (
+            <div style={{ marginBottom: 10 }}>
               <img
-                src={initialValues.imgUrl}
-                alt="Imagem atual do produto"
-                style={{ maxWidth: 200, maxHeight: 200, objectFit: 'contain', border: '1px solid #ddd', borderRadius: 4 }}
+                src={initialValues.image_url}
+                alt="Atual"
+                style={{ maxWidth: 100, borderRadius: 4 }}
               />
-              <p style={{ margin: '8px 0 0 0', fontSize: 12, color: '#666' }}>
-                Envie uma nova imagem apenas se desejar alterá-la.
-              </p>
             </div>
           )}
           <Controller
             control={control}
             name="file"
-            rules={{ required: !isEditing ? 'Imagem é obrigatória' : false }}
+            rules={{ required: !isEditing ? "Imagem é obrigatória" : false }}
             render={({ field }) => (
               <input
                 type="file"
@@ -290,28 +254,58 @@ export default function ProductInsertForm({ onSuccess, initialValues }: { onSucc
             )}
           />
           {errors.file && (
-            <div style={{ color: 'red', fontSize: 12 }}>{(errors.file as any).message}</div>
-          )}
-          {watchedFile && (
-            <div style={{ marginTop: 8 }}>
-              Arquivo: {watchedFile.name} ({Math.round(watchedFile.size / 1024)} KB)
+            <div style={{ color: "red", fontSize: 12, marginTop: 4 }}>
+              {(errors.file as any).message}
             </div>
           )}
         </div>
+
         {loading ? (
-          <div style={{ margin: 30, display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8 }}>
-            <CircularProgress size={20} />
-            <span>Enviando...</span>
+          <div
+            style={{
+              display: "flex",
+              alignItems: "center",
+              justifyContent: "center",
+              gap: 8,
+              marginTop: 16,
+            }}
+          >
+            <CircularProgress size={24} />
+            <span>Processando...</span>
           </div>
         ) : (
-          <div style={{ margin: 30, display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8 }}>
-            <button type="submit" style={{ padding: '8px 16px' }}>
-              {isEditing ? 'Atualizar Produto' : 'Enviar Produto'}
-            </button>
-          </div>
+          <button
+            type="submit"
+            style={{
+              padding: "12px",
+              background: "#006241",
+              color: "white",
+              border: "none",
+              borderRadius: 4,
+              fontWeight: "bold",
+              cursor: "pointer",
+              marginTop: 16,
+            }}
+          >
+            {isEditing ? "Salvar Alterações" : "Criar Produto"}
+          </button>
         )}
       </form>
-      {message && <p style={{ marginTop: 12 }}>{message}</p>}
+      {message && (
+        <div
+          style={{
+            marginTop: 16,
+            padding: 12,
+            borderRadius: 4,
+            backgroundColor: message.includes("sucesso")
+              ? "#d4edda"
+              : "#f8d7da",
+            color: message.includes("sucesso") ? "#155724" : "#721c24",
+          }}
+        >
+          {message}
+        </div>
+      )}
     </div>
   );
 }
