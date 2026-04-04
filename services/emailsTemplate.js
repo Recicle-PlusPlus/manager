@@ -1,6 +1,5 @@
-
-function getAccessDennyHtml(userName='Usuário', companyName = 'Recicle++'){
-    const acessDenny = `
+function getAccessDennyHtml(userName = "Usuário", companyName = "Recicle++") {
+  const acessDenny = `
         <div style="font-family: Arial, sans-serif; margin: 20px; padding: 20px; border: 1px solid #ccc; max-width: 600px; text-align: center;">
             <h1 style="color: #d9534f;">Pedido de Cadastro Negado</h1>
             <h4>Prezado ${userName},</h4>
@@ -12,12 +11,17 @@ function getAccessDennyHtml(userName='Usuário', companyName = 'Recicle++'){
             <p>Agradecemos o seu interesse em nossa plataforma e lamentamos por qualquer inconveniência causada.</p>
             <p>Atenciosamente,<br>Equipe ${companyName}</p>
         </div>
-    `
-    return acessDenny;
+    `;
+  return acessDenny;
 }
 
-function getAccessAcceptHtml(linkLogin, userName = 'Usuário', email="teste@test", companyName = 'Recicle++'){
-    const acessAccept = `
+function getAccessAcceptHtml(
+  linkLogin,
+  userName = "Usuário",
+  email = "teste@test",
+  companyName = "Recicle++",
+) {
+  const acessAccept = `
         <div style="font-family: Arial, sans-serif; margin: 20px; padding: 20px; border: 1px solid #4CAF50; max-width: 600px; text-align: center;">
             <h1 style="color: #4CAF50;">Pedido de Cadastro Aceito</h1>
             <h5>Prezado(a) ${userName},</h5>
@@ -40,8 +44,8 @@ function getAccessAcceptHtml(linkLogin, userName = 'Usuário', email="teste@test
             </p>
             <p>Atenciosamente,<br>Equipe ${companyName}</p>
         </div>
-    `
-    return acessAccept;
+    `;
+  return acessAccept;
 }
 
-export {getAccessDennyHtml, getAccessAcceptHtml}
+export { getAccessDennyHtml, getAccessAcceptHtml };

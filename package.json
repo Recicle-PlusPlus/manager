@@ -23,7 +23,6 @@
     "@supabase/supabase-js": "^2.95.3",
     "eslint": "8.47.0",
     "eslint-config-next": "13.4.19",
-    "firebase": "^10.3.0",
     "firebase-admin": "^11.10.1",
     "next": "13.4.19",
     "nodemailer": "^6.9.7",
